@@ -1,5 +1,6 @@
 import argparse
 import os
+import time
 
 import torch
 from torch import nn
@@ -18,29 +19,42 @@ def device_choose():
         device_name = 'cpu'
     print(f'Using {device_name}')
     return device_name
-
+#
 def parse_args():
     parser = argparse.ArgumentParser(description='Train a neural network to classify CIFAR10')
     parser.add_argument('--model', type=str, default='r18', help='model to train (default: r18)')
     parser.add_argument('--batch-size', type=int, default=64, help='input batch size for training (default: 64)')
     parser.add_argument('--epochs', type=int, default=5, help='number of epochs to train (default: 5)')
     parser.add_argument('--lr', type=float, default=0.003, help='learning rate (default: 0.003)')
+    # Specifies the momentum factor for the SGD (Stochastic Gradient Descent) optimizer.
+    # Momentum helps accelerate training by moving past small gradients.
     parser.add_argument('--momentum', type=float, default=0.9, help='SGD momentum (default: 0.9)')
     parser.add_argument('--no-cuda', action='store_true', default=False, help='disables CUDA training')
+    # Sets the random seed for reproducibility, ensuring that results are consistent across different runs.
     parser.add_argument('--seed', type=int, default=1, help='random seed (default: 1)')
+    # Specifies how many batches to wait before printing the training status (i.e., loss). Helps in monitoring training progress.
     parser.add_argument('--log-interval', type=int, default=10, help='how many batches to wait before logging training status')
     parser.add_argument('--save-model', action='store_true', default=False, help='For Saving the current Model')
+    # If specified, performs a quick pass through the data to ensure everything works correctly, without actually training the model.
     parser.add_argument('--dry-run', action='store_true', default=False, help='quickly check a single pass')
     return parser.parse_args()
 
 def train(model, trainloader, optimizer, criterion, device, epoch):
     model.train()
     for batch_idx, (data, target) in enumerate(trainloader):
+        # load data and target to device
         data, target = data.to(device), target.to(device)
+        # Clear the gradients of all optimized tensors before each training step.
+        # By default, gradients accumulate in Pytorch
         optimizer.zero_grad()
+        # do a forward pass through the model with current batch of data
         output = model(data)
+        # calculate loss and normalize
         loss = criterion(output, target)/len(output)
+        # backward propagation and compute the gradients of the loss respect to the model parameters
+        # and save to parameter.grad
         loss.backward()
+        # update the parameter with parameter.grad
         optimizer.step()
         if batch_idx % args.log_interval == 0:
             print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
@@ -53,12 +67,17 @@ def test(model, device, test_loader, criterion, set="Test"):
     model.eval()
     test_loss = 0
     correct = 0
+    # disable gradient calculation, this reduces memory usage and speeds up(gradients are not needed here)
     with torch.no_grad():
         for data, target in test_loader:
             data, target = data.to(device), target.to(device)
             output = model(data)
-            test_loss += criterion(output, target).item()  # sum up batch loss
+            # sum up batch loss, item() get scalar value from pytorch tensor
+            test_loss += criterion(output, target).item()
+            # dim = 1, get the class index with the highest probability
+            # with keepdim, the shape remains [batch_size, 1], otherwise it will be [batch_size]
             pred = output.argmax(dim=1, keepdim=True)  # get the index of the max log-probability
+            # .view_as() reshape the target to the pre.shape
             correct += pred.eq(target.view_as(pred)).sum().item()
 
     test_loss /= len(test_loader.dataset)
@@ -74,6 +93,7 @@ def run(args):
     # Download and load the training data
     # add randomcrop, randomhorizontalflip
     transform = transforms.Compose([transforms.RandomCrop(32, padding=4),
+                                    # randomly crop to size 32*32 with 4 piex padding
                                     transforms.RandomHorizontalFlip(),
                                     transforms.ToTensor(),
                                     # ImageNet mean/std values should also fit okayish for CIFAR
@@ -82,14 +102,17 @@ def run(args):
 
     # TODO: adjust folder
     dataset = datasets.CIFAR10('./cifar10/folder', download=True, train=True, transform=transform)
-    trainset, valset = torch.utils.data.random_split(dataset, [int(len(dataset)*0.9), len(dataset)-int(len(dataset)*0.9)])
-    trainloader = DataLoader(trainset, batch_size=64, shuffle=True)
-    valloader = DataLoader(valset, batch_size=64, shuffle=False)
+    trainset, valset = torch.utils.data.random_split(dataset,
+                                                     [int(len(dataset)*0.9), len(dataset)-int(len(dataset)*0.9)])
+    # trainloader = DataLoader(trainset, batch_size=64, shuffle=True)
+    # valloader = DataLoader(valset, batch_size=64, shuffle=False)
+    trainloader = DataLoader(trainset, batch_size= args.batch_size, shuffle=True)
+    valloader = DataLoader(valset, batch_size= args.batch_size, shuffle=False)
 
     # Download and load the test data
     # TODO: adjust folder
     testset = datasets.CIFAR10('./cifar10/folder/', download=True, train=False, transform=transform)
-    testloader = DataLoader(testset, batch_size=64, shuffle=True)
+    testloader = DataLoader(testset, batch_size=args.batch_size, shuffle=True)
 
     # Build a feed-forward network
     print(f"Using {args.model}")
@@ -110,7 +133,7 @@ def run(args):
                          cross_attn_dim_head = 64, depth = 3, dropout = 0.1,
                          emb_dropout = 0.1)
 
-    # Define the loss
+    # Define the loss, using cross entropy loss with reduction set to "sum"
     criterion = nn.CrossEntropyLoss(reduction="sum")
     # if torch.cuda.is_available():
     #     device = torch.device("cuda")
@@ -118,6 +141,7 @@ def run(args):
     #     device = torch.device("cpu")
     device = torch.device(device_choose())
     model.to(device)
+    # using stochastic gradient descent with specified learning rate and momentum
     optimizer = optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum)
 
     # save the model with the highest validation accuracy
@@ -138,4 +162,7 @@ if __name__ == '__main__':
     # choose
     # device = torch.device(device_choose())
     args = parse_args()
+    s = time.time()
     run(args)
+    e = time.time()
+    print(f"{e - s}s used")

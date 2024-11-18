@@ -42,16 +42,22 @@ class Attention(nn.Module):
     def __init__(self, dim, heads = 8, dim_head = 64, dropout = 0.):
         super().__init__()
         # set heads and scale (=sqrt(dim_head))
-        # TODO
+        self.heads = heads
+        self.scale = dim_head ** -0.5
+        embedding_dim = dim_head * heads
+
         # we need softmax layer and dropout
-        # TODO
         # as well as the q linear layer
-        # TODO
         # and the k/v linear layer (can be realized as one single linear layer
         # or as two individual ones)
-        # TODO
         # and the output linear layer followed by dropout
-        # TODO
+        self.qm = nn.Linear(dim, embedding_dim)
+        self.km = nn.Linear(dim, embedding_dim)
+        self.vm = nn.Linear(dim, embedding_dim)
+        self.out = nn.Sequential(nn.Linear(dim, dim), nn.Dropout(dropout))
+
+        self.softmax = nn.Softmax(dim=-1)
+        self.dropout_layer = nn.Dropout(dropout)
 
     def forward(self, x, context = None, kv_include_self = False):
         # now compute the attention/cross-attention
@@ -65,9 +71,28 @@ class Attention(nn.Module):
 
         if kv_include_self:
             # cross attention requires CLS token includes itself as key / value
-            context = torch.cat((x, context), dim = 1) 
-        
-        # TODO: attention 
+            context = torch.cat((x, context), dim = 1)
+        # TODO: attention
+        # compute query, key, value matrices
+        q = self.qm(x)
+        k = self.km(context)
+        v = self.vm(context)
+        # reshape to [batch_size, heads, token_number, dim_head]
+        q = rearrange(q, 'b n (h d) -> b h n d', h=self.heads)
+        k = rearrange(k, 'b n (h d) -> b h n d', h=self.heads)
+        v = rearrange(v, 'b n (h d) -> b h n d', h=self.heads)
+        # compute attention scores bu doting Q and K then scale
+        scores = einsum('b h i d, b h i d -> b h i d', q, k) * self.scale
+        # softmax
+        attention = self.softmax(scores)
+        # dropout
+        attention = self.dropout_layer(attention)
+        # multiple attention and v to compute output
+        _out = einsum('b h i d, b h i d -> b h i d', attention, v)
+        # reshape
+        _out = rearrange(_out, 'b h n d -> b n (h d)')
+        # map output to original dimension
+        out = self.out(_out)
 
         return out 
 
@@ -342,7 +367,8 @@ class CrossViT(nn.Module):
 
 if __name__ == "__main__":
     x = torch.randn(16, 3, 32, 32)
-    vit = ViT(image_size = 32, patch_size = 8, num_classes = 10, dim = 64, depth = 2, heads = 8, mlp_dim = 128, dropout = 0.1, emb_dropout = 0.1)
+    vit = ViT(image_size = 32, patch_size = 8, num_classes = 10,
+              dim = 64, depth = 2, heads = 8, mlp_dim = 128, dropout = 0.1, emb_dropout = 0.1)
     cvit = CrossViT(image_size = 32, num_classes = 10, sm_dim = 64, lg_dim = 128, sm_patch_size = 8,
                     sm_enc_depth = 2, sm_enc_heads = 8, sm_enc_mlp_dim = 128, sm_enc_dim_head = 64,
                     lg_patch_size = 16, lg_enc_depth = 2, lg_enc_heads = 8, lg_enc_mlp_dim = 128,
