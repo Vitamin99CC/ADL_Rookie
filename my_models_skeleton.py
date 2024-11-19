@@ -54,17 +54,20 @@ class Attention(nn.Module):
         self.qm = nn.Linear(dim, embedding_dim)
         self.km = nn.Linear(dim, embedding_dim)
         self.vm = nn.Linear(dim, embedding_dim)
-        self.out = nn.Sequential(nn.Linear(dim, dim), nn.Dropout(dropout))
 
-        self.softmax = nn.Softmax(dim=-1)
+        self.output = nn.Sequential(nn.Linear(embedding_dim, dim), nn.Dropout(dropout))
+
+        # self.softmax = nn.Softmax(dim=-1)
         self.dropout_layer = nn.Dropout(dropout)
 
     def forward(self, x, context = None, kv_include_self = False):
         # now compute the attention/cross-attention
         # in cross attention: x = class token, context = token embeddings
-        # don't forget the dropout after the attention 
+        # don't forget the dropout after the attention
         # and before the multiplication w. 'v'
         # the output should be in the shape 'b n (h d)'
+
+        # batch_size, token number, dim, heads
         b, n, _, h = *x.shape, self.heads
         if context is None:
             context = x
@@ -81,21 +84,87 @@ class Attention(nn.Module):
         q = rearrange(q, 'b n (h d) -> b h n d', h=self.heads)
         k = rearrange(k, 'b n (h d) -> b h n d', h=self.heads)
         v = rearrange(v, 'b n (h d) -> b h n d', h=self.heads)
-        # compute attention scores bu doting Q and K then scale
-        scores = einsum('b h i d, b h i d -> b h i d', q, k) * self.scale
+        # compute attention scores by doting Q and K then scale
+        scores = einsum('b h i d, b h j d -> b h i j', q, k) * self.scale
+        # scores = scores - scores.mean(dim=-1, keepdim=True)
         # softmax
-        attention = self.softmax(scores)
+        _attention = scores.softmax(dim=-1)
         # dropout
-        attention = self.dropout_layer(attention)
+        attention = self.dropout_layer(_attention)
         # multiple attention and v to compute output
-        _out = einsum('b h i d, b h i d -> b h i d', attention, v)
+        _out = einsum('b h i j, b h j d -> b h i d', attention, v)
         # reshape
         _out = rearrange(_out, 'b h n d -> b n (h d)')
         # map output to original dimension
-        out = self.out(_out)
+        out = self.output(_out)
+        # out = rearrange(out, 'b h n d -> b n (h d)')
 
-        return out 
+        return out
 
+# class Attention(nn.Module):
+#     def __init__(self, dim, heads=8, dim_head=64, dropout=0.):
+#         super().__init__()
+#         self.heads = heads
+#         self.scale = dim_head ** -0.5  # Scaling factor for stable gradients
+#         inner_dim = dim_head * heads  # Total dimension after concatenating all heads
+#
+#         # Linear layers for query, key, and value
+#         self.to_q = nn.Linear(dim, inner_dim, bias=False)
+#         self.to_k = nn.Linear(dim, inner_dim, bias=False)
+#         self.to_v = nn.Linear(dim, inner_dim, bias=False)
+#
+#         # Output projection and dropout
+#         self.to_out = nn.Sequential(
+#             nn.Linear(inner_dim, dim),
+#             nn.Dropout(dropout)
+#         )
+#
+#         # Dropout for attention weights
+#         self.attn_dropout = nn.Dropout(dropout)
+#
+#     def forward(self, x, context=None, kv_include_self=False):
+#         """
+#         Args:
+#             x (Tensor): Input tensor of shape (batch_size, tokens, dim)
+#             context (Tensor, optional): Cross-attention context tensor
+#             kv_include_self (bool, optional): Whether to include `x` in `context` for cross-attention
+#         Returns:
+#             Tensor: Output tensor of shape (batch_size, tokens, dim)
+#         """
+#         b, n, _, h = *x.shape, self.heads
+#
+#         if context is None:
+#             context = x  # Self-attention
+#         if kv_include_self:
+#             context = torch.cat((x, context), dim=1)  # Include `x` in the context for cross-attention
+#
+#         # Compute Q, K, V
+#         q = self.to_q(x)  # Shape: (b, n, h * dim_head)
+#         k = self.to_k(context)  # Shape: (b, n_ctx, h * dim_head)
+#         v = self.to_v(context)  # Shape: (b, n_ctx, h * dim_head)
+#
+#         # Reshape into multi-head dimensions
+#         q = rearrange(q, 'b n (h d) -> b h n d', h=h)
+#         k = rearrange(k, 'b n (h d) -> b h n d', h=h)
+#         v = rearrange(v, 'b n (h d) -> b h n d', h=h)
+#
+#         # Compute attention scores
+#         scores = einsum('b h i d, b h j d -> b h i j', q, k) * self.scale
+#
+#         # Softmax normalization
+#         attn = scores.softmax(dim=-1)
+#
+#         # Apply dropout to attention weights
+#         attn = self.attn_dropout(attn)
+#
+#         # Compute weighted sum of values
+#         out = einsum('b h i j, b h j d -> b h i d', attn, v)
+#
+#         # Reshape back to original dimensions
+#         out = rearrange(out, 'b h n d -> b n (h d)')
+#
+#         # Final projection
+#         return self.to_out(out)
 
 # ViT & CrossViT
 class Transformer(nn.Module):
@@ -257,6 +326,7 @@ class ViT(nn.Module):
         self.dropout = nn.Dropout(emb_dropout)
 
         # create transformer blocks
+        # problem
         self.transformer = Transformer(dim, depth, heads, dim_head, mlp_dim, dropout)
 
         self.pool = pool
