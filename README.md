@@ -16,3 +16,6 @@ With pre-trained weights it can be 79% after 5 epochs.<br>
 
 ### Update 18.11.2024
 Partially fix the class Attention(nn.Module) in my_models_skeleton to solve the task 1.2.<br>
+
+### Update 19.11.2024
+Fix the class Attention maybe, the accuracy after 5 epochs reach about 37%.<br>
