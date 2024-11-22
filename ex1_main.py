@@ -10,6 +10,8 @@ from torch import optim
 
 from my_models_skeleton import ViT, CrossViT   # rename the skeleton file for your implementation / comment before testing for ResNet
 
+# from test import ViT, CrossViT
+
 def device_choose():
     if torch.cuda.is_available():
         device_name = 'cuda'
@@ -22,9 +24,10 @@ def device_choose():
 #
 def parse_args():
     parser = argparse.ArgumentParser(description='Train a neural network to classify CIFAR10')
-    parser.add_argument('--model', type=str, default='r18', help='model to train (default: r18)')
+    # parser.add_argument('--model', type=str, default='r18', help='model to train (default: r18)')
+    parser.add_argument('--model', type=str, default='cvit', help='model to train (default: r18)')
     parser.add_argument('--batch-size', type=int, default=64, help='input batch size for training (default: 64)')
-    parser.add_argument('--epochs', type=int, default=5, help='number of epochs to train (default: 5)')
+    parser.add_argument('--epochs', type=int, default=10, help='number of epochs to train (default: 5)')
     parser.add_argument('--lr', type=float, default=0.003, help='learning rate (default: 0.003)')
     # Specifies the momentum factor for the SGD (Stochastic Gradient Descent) optimizer.
     # Momentum helps accelerate training by moving past small gradients.
