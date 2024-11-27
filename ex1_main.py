@@ -94,7 +94,7 @@ def test(model, device, test_loader, criterion, set="Test"):
 
 def run(args):
     # Download and load the training data
-    # add randomcrop, randomhorizontalflip
+    # Task 1.1 add randomcrop, randomhorizontalflip
     transform = transforms.Compose([transforms.RandomCrop(32, padding=4),
                                     # randomly crop to size 32*32 with 4 piex padding
                                     transforms.RandomHorizontalFlip(),
@@ -147,7 +147,7 @@ def run(args):
     # using stochastic gradient descent with specified learning rate and momentum
     optimizer = optim.SGD(model.parameters(), lr=args.lr, momentum=args.momentum)
 
-    # save the model with the highest validation accuracy
+    # Task 1.1 save the model with the highest validation accuracy
     hightest_accuracy = 0.0
     best_epoch = -1
     os.makedirs('./models', exist_ok=True)

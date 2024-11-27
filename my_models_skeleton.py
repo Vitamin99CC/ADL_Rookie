@@ -38,7 +38,7 @@ class FeedForward(nn.Module):
         return self.net(x)
 
 # ViT & CrossViT
-# Attention class for multi-head self-attention mechanism with softmax and dropout
+# Task 1.2 Attention class for multi-head self-attention mechanism with softmax and dropout
 class Attention(nn.Module):
     def __init__(self, dim, heads = 8, dim_head = 64, dropout = 0.):
         super().__init__()
@@ -81,7 +81,7 @@ class Attention(nn.Module):
         q = self.qm(x)
         k = self.km(context)
         v = self.vm(context)
-        # reshape to [batch_size, heads, token_number, dim_head]
+        # reshape to [batch_size, heads, token_number, dim_head] to suit the logic of multi attention
         q = rearrange(q, 'b n (h d) -> b h n d', h=self.heads)
         k = rearrange(k, 'b n (h d) -> b h n d', h=self.heads)
         v = rearrange(v, 'b n (h d) -> b h n d', h=self.heads)
@@ -178,6 +178,7 @@ class CrossTransformer(nn.Module):
         # 1. small cls token to large patches and
         # 2. large cls token to small patches
         # TODO
+        # residual shortcut, remain the feature of input0
         for s_to_l, l_to_s in self.layers:
             sm_cls = s_to_l(sm_cls, context = lg_patch_tokens) + sm_cls
             lg_cls = l_to_s(lg_cls, context = sm_patch_tokens) + lg_cls
@@ -189,6 +190,10 @@ class CrossTransformer(nn.Module):
 
 # CrossViT
 # multi-scale encoder
+# use transform encoder for small and large sized patch
+# cross scale fusion
+# input: sm_token, lg_token(batch_size, num_token, dim)
+# output: sm_token, lg_token, fused with lg, sm token
 class MultiScaleEncoder(nn.Module):
     def __init__(
         self,
@@ -217,6 +222,7 @@ class MultiScaleEncoder(nn.Module):
 
     def forward(self, sm_tokens, lg_tokens):
         # forward through the transformer encoders and cross attention block
+        # use residual shortcuts
         for sm_encoder, lg_encode, cross_attention in self.layers:
             sm_tokens = sm_encoder(sm_tokens) + sm_tokens
             lg_tokens = lg_encode(lg_tokens) + lg_tokens
@@ -226,6 +232,9 @@ class MultiScaleEncoder(nn.Module):
 # CrossViT (could actually also be used in ViT)
 # helper function that makes the embedding from patches
 # have a look at the image embedding in ViT
+# Task 1.3 divide image to patch size and get patch, flatten and project it to 1D with fixed dim
+# add positional embedding
+# add CLS token
 class ImageEmbedder(nn.Module):
     def __init__(
         self,
