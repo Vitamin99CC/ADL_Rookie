@@ -90,7 +90,7 @@ class Diffusion:
         
         noise = torch.randn_like(x, device=self.device) if t > 0 else 0
         variance = self.posterior_variance[t_index]
-        x_t_minus_1 = 1./torch.sqrt(self.alphas[t]) * \
+        x_t_minus_1 = 1./torch.sqrt(self.alphas[t_index]) * \
             (x - (1.-self.alphas[t_index])/(torch.sqrt(1-self.alphabar_t[t_index]))*preds) + \
             variance * noise
         # TODO (2.2): The method should return the image at timestep t-1.
@@ -101,9 +101,9 @@ class Diffusion:
     def sample(self, model, image_size, batch_size=16, channels=3):
         # TODO (2.2): Implement the full reverse diffusion loop from random noise to an image, iteratively ''reducing'' the noise in the generated image.
         img = torch.randn((batch_size,) + image_size, device=self.device)
-        for t in tqdm (reversed(range(0, len(self.timesteps))), 
+        for t_index in tqdm (reversed(range(0, len(self.timesteps))), 
                        desc = 'sampling loop time step', total = self.num_timesteps):
-            img = self.p_sample(img, t)
+            img = self.p_sample(model, img, self.timesteps[t_index], t_index)
         # TODO (2.2): Return the generated images
         return img
         
