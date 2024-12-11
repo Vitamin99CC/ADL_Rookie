@@ -32,15 +32,70 @@ def parse_args():
     return parser.parse_args()
 
 
-def sample_and_save_images(n_images, diffusor, model, device, store_path):
+def sample_and_save_images(n_images, diffusor, model, device, store_path, transform=None, testloader=None):
     # TODO: Implement - adapt code and method signature as needed
-    pass
+    os.makedirs(store_path, exist_ok=True)
+    model.eval()
+    
+    # Get a batch of test images
+    test_iter = iter(testloader)
+    images, _ = next(test_iter)  # Fetch the first batch
+    images = images[:n_images].to(device)  # Select the first `n_images`
 
+    # Generate images
+    with torch.no_grad():
+        noise = torch.randn_like(images)  # Generate noise with the same shape as test images
+        generated_images = diffusor.sample_images(model, noise)
+
+    # Save each generated image
+    for i, img in enumerate(generated_images):
+        # Reverse transform the generated image
+        reversed_img = transform(img.cpu())
+        # Save the image
+        reversed_img.save(os.path.join(store_path, f"generated_image_{i}.png"))
 
 def test(model, testloader, diffusor, device, args):
     # TODO: Implement - adapt code and method signature as needed
-    pass
+    model.eval()  # Set the model to evaluation mode
+    total_loss = 0
+    metric_results = []
+    batch_size = args.batch_size
+    timesteps = args.timesteps
 
+    with torch.no_grad():  # Disable gradient computation for testing
+        pbar = tqdm(testloader, desc="Testing")
+        for step, (images, labels) in enumerate(pbar):
+            images = images.to(device)
+
+            # Algorithm 1 line 3: sample t uniformly for every example in the batch
+            t = torch.randint(0, timesteps, (len(images),), device=device).long()
+
+            # Compute the loss for the test batch
+            loss = diffusor.p_losses(model, images, t, loss_type="l2")
+            total_loss += loss.item()
+            print(f"Test Loss: {total_loss:.6f}")
+            # Optional: compute additional metrics like SSIM or PSNR
+            if args.compute_metrics:
+                generated_images = diffusor.sample_images(model, images, t)
+                batch_metrics = args.compute_metrics(generated_images, images)
+                metric_results.extend(batch_metrics)
+
+            if args.dry_run:
+                break
+
+        # Calculate average loss over the test set
+        avg_loss = total_loss / len(testloader)
+        print(f"Avg Test Loss: {avg_loss:.6f}")
+
+        # Optionally log additional metrics
+        if args.compute_metrics:
+            avg_metrics = {
+                metric: sum(m[metric] for m in metric_results) / len(metric_results)
+                for metric in metric_results[0].keys()
+            }
+            print("Additional Metrics:", avg_metrics)
+
+    return avg_loss
 
 def train(model, trainloader, optimizer, diffusor, epoch, device, args):
     batch_size = args.batch_size
@@ -100,13 +155,13 @@ def run(args):
         ToPILImage(),
     ])
 
-    dataset = datasets.CIFAR10('/proj/aimi-adl/CIFAR10/', download=True, train=True, transform=transform)
+    dataset = datasets.CIFAR10('../CIFAR10/', download=True, train=True, transform=transform)
     trainset, valset = torch.utils.data.random_split(dataset, [int(len(dataset) * 0.9), len(dataset) - int(len(dataset) * 0.9)])
     trainloader = DataLoader(trainset, batch_size=batch_size, shuffle=True)
     valloader = DataLoader(valset, batch_size=batch_size, shuffle=False)
 
     # Download and load the test data
-    testset = datasets.CIFAR10('/proj/aimi-adl/CIFAR10/', download=True, train=False, transform=transform)
+    testset = datasets.CIFAR10('../CIFAR10/', download=True, train=False, transform=transform)
     testloader = DataLoader(testset, batch_size=int(batch_size/2), shuffle=True)
 
     for epoch in range(epochs):
@@ -115,13 +170,16 @@ def run(args):
 
     test(model, testloader, diffusor, device, args)
 
-    save_path = "<path/to/my/images>"  # TODO: Adapt to your needs
+    save_path = "./img"  # TODO: Adapt to your needs
     n_images = 8
-    sample_and_save_images(n_images, diffusor, model, device, save_path)
+    sample_and_save_images(n_images, diffusor, model, device, save_path, reverse_transform, testloader)
     torch.save(model.state_dict(), os.path.join("/proj/aimi-adl/models", args.run_name, f"ckpt.pt"))
+
+
 
 
 if __name__ == '__main__':
     args = parse_args()
     # TODO (2.2): Add visualization capabilities
     run(args)
+    

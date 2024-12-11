@@ -17,7 +17,19 @@ def cosine_beta_schedule(timesteps, s=0.008):
     cosine schedule as proposed in https://arxiv.org/abs/2102.09672
     """
     # TODO (2.3): Implement cosine beta/variance schedule as discussed in the paper mentioned above
-    pass
+    t = torch.arange(0, timesteps, dtype=torch.float32)
+
+    # Total timesteps (T - 1 for normalization)
+    T = timesteps - 1
+
+    # Compute alpha_bar_t (cosine schedule)
+    alpha_bar_t = torch.cos(((t / T) + s) / (1 + s) * (torch.pi / 2)) ** 2
+
+    # Compute beta_t using the formula
+    beta_schedule = torch.zeros_like(alpha_bar_t)
+    beta_schedule[0] = 1 - alpha_bar_t[0]  # Handle the first beta_t value
+    beta_schedule[1:] = 1 - (alpha_bar_t[1:] / alpha_bar_t[:-1])  # Compute for t > 0
+    return beta_schedule
 
 
 def sigmoid_beta_schedule(beta_start, beta_end, timesteps):
@@ -26,7 +38,14 @@ def sigmoid_beta_schedule(beta_start, beta_end, timesteps):
     """
     # TODO (2.3): Implement a sigmoidal beta schedule. Note: identify suitable limits of where you want to sample the sigmoid function.
     # Note that it saturates fairly fast for values -x << 0 << +x
-    pass
+        # Create an array of timesteps t ranging from 0 to T-1
+    s_limit = 5
+    t = torch.arange(0, timesteps)
+    # Sigmoid function values
+    sigmoid_values = 1 / (1 + np.exp(-(-s_limit + (2 * t / timesteps) * s_limit)))
+    # Compute beta_t based on the formula
+    beta_t = beta_start + sigmoid_values * (beta_end - beta_start)
+    return beta_t
 
 
 class Diffusion:
